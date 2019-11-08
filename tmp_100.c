@@ -10,6 +10,7 @@
 #define BYTES_TO_READ 4
 #define READ_REGISTER 0x00
 
+struct i2c_client *master_client;
 dev_t dev = 0;
 static struct class *dev_class;
 /*add file_operations*/
@@ -19,6 +20,15 @@ static int etx_open(struct inode *inode, struct file *file);
 static int etx_release(struct inode *inode, struct file *file);
 static ssize_t etx_read(struct file *filp, char __user *buf, size_t len,loff_t * off);
 static ssize_t etx_write(struct file *filp, const char *buf, size_t len, loff_t * off);
+
+
+/*try to read*/
+static s32 tmp100_read_register(struct i2c_client *client, u8 buf) {
+	s32 data;
+	data = i2c_smbus_read_byte_data(client, buf);
+return data;
+}
+
 
 static struct file_operations fops =
 {
@@ -44,6 +54,8 @@ static int etx_release(struct inode *inode, struct file *file)
 static ssize_t etx_read(struct file *filp, char __user *buf, size_t len, loff_t *off)
 {
 	printk(KERN_INFO "Driver Read Function Called...!!!\n");
+	/*try to read*/
+	pr_alert("%d\n", tmp100_read_register(master_client, READ_REGISTER));
 	return 0;
 }
 static ssize_t etx_write(struct file *filp, const char __user *buf, size_t len, loff_t *off)
@@ -59,6 +71,7 @@ static int tmp100_probe(struct i2c_client *client,
 	int error;
 	u8 val[BYTES_TO_READ];
 	struct i2c_adapter *adapter = client->adapter;
+	master_client = client;
 
 	pr_alert("I have registered PROBE!!!\n");
 
