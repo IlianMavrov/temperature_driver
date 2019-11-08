@@ -1,0 +1,11 @@
+
+&i2c2 {
+	status = "okay";
+	bus_freq = <100000>;
+
+	tmp100@49 {
+		model = "TI tmp100";
+		compatible = "ti,tmp100";
+		reg = <0x49>;
+	};
+};
