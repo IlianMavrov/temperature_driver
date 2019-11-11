@@ -16,54 +16,29 @@ static struct class *dev_class;
 /*add file_operations*/
 static struct cdev etx_cdev;
 
-static int etx_open(struct inode *inode, struct file *file);
-static int etx_release(struct inode *inode, struct file *file);
-static ssize_t etx_read(struct file *filp, char __user *buf, size_t len,loff_t * off);
-static ssize_t etx_write(struct file *filp, const char *buf, size_t len, loff_t * off);
-
-
 /*try to read*/
-static s32 tmp100_read_register(struct i2c_client *client, u8 buf) {
-	s32 data;
-	data = i2c_smbus_read_byte_data(client, buf);
-return data;
+static s32 tmp100_read(struct i2c_client *client, u8 buf) {
+	s32 byte_data;
+
+	byte_data = i2c_smbus_read_byte_data(client, buf);
+	if (byte_data < 0){
+		return -EIO;
+	}
+	else{
+		return byte_data;
+	}
 }
 
+static ssize_t tmp100_file_operation(struct file *filp, char __user *buf,
+									size_t len, loff_t *off){
+	pr_alert("The temperature is %d C\n", tmp100_read(master_client, READ_REGISTER));
+	return 0;
+}
 
-static struct file_operations fops =
-{
+static struct file_operations fops = {
 	.owner          = THIS_MODULE,
-	.read           = etx_read,
-	.write          = etx_write,
-	.open           = etx_open,
-	.release        = etx_release,
+	.read           = tmp100_file_operation,
 };
-
-static int etx_open(struct inode *inode, struct file *file)
-{
-	printk(KERN_INFO "Driver Open Function Called...!!!\n");
-	return 0;
-}
-
-static int etx_release(struct inode *inode, struct file *file)
-{
-	printk(KERN_INFO "Driver Release Function Called...!!!\n");
-	return 0;
-}
-
-static ssize_t etx_read(struct file *filp, char __user *buf, size_t len, loff_t *off)
-{
-	printk(KERN_INFO "Driver Read Function Called...!!!\n");
-	/*try to read*/
-	pr_alert("%d\n", tmp100_read_register(master_client, READ_REGISTER));
-	return 0;
-}
-static ssize_t etx_write(struct file *filp, const char __user *buf, size_t len, loff_t *off)
-{
-	printk(KERN_INFO "Driver Write Function Called...!!!\n");
-	return len;
-}
-/*finish file_operations*/
 
 static int tmp100_probe(struct i2c_client *client,
 						const struct i2c_device_id *id) {
@@ -91,22 +66,22 @@ static int tmp100_probe(struct i2c_client *client,
 	pr_alert("Major = %d Minor = %d \n", MAJOR(dev), MINOR(dev));
 
 	/*Creating cdev structure*/
-	cdev_init(&etx_cdev,&fops);
+	cdev_init(&etx_cdev, &fops);
 
 	/*Adding character device to the system*/
-	if((cdev_add(&etx_cdev,dev,1)) < 0){
-	printk(KERN_INFO "Cannot add the device to the system\n");
-	goto r_class;
+	if((cdev_add(&etx_cdev, dev, 1)) < 0){
+		printk(KERN_INFO "Cannot add the device to the system\n");
+		goto r_class;
 	}
 
 	/*Creating struct class*/
-	if ((dev_class = class_create(THIS_MODULE,"ilian_class")) == NULL){
+	if ((dev_class = class_create(THIS_MODULE,"tmp100_class")) == NULL){
 		printk(KERN_INFO "Cannot create the struct class for device\n");
 		goto r_class;
 	}
 
 	/*Creating device*/
-	if((device_create(dev_class,NULL,dev,NULL,"ilian_device")) == NULL){
+	if((device_create(dev_class, NULL, dev, NULL, "tmp100_device")) == NULL){
 		printk(KERN_INFO "Cannot create the Device\n");
 		goto r_device;
 	}
