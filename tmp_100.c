@@ -2,21 +2,20 @@
 #include <linux/init.h>
 #include <linux/module.h>
 #include <linux/i2c.h>
-#include <linux/fs.h>	/*file operation, open/close, read/write to device*/
+#include <linux/fs.h>
 #include <linux/device.h>
 #include <linux/kdev_t.h>
 #include <linux/cdev.h>
+#include <linux/uaccess.h>
 
-#define BYTES_TO_READ 4
+#define BYTES_TO_READ 2
 #define READ_REGISTER 0x00
 
-struct i2c_client *master_client;
 dev_t dev;
+static struct i2c_client *master_client;
 static struct class *dev_class;
-/*add file_operations*/
 static struct cdev etx_cdev;
 
-/*try to read*/
 static s32 tmp100_read(struct i2c_client *client, u8 buf)
 {
 	s32 word_data;
@@ -33,7 +32,7 @@ static ssize_t tmp100_print(struct file *filp, char __user *buf,
 {
 	s32 word_data;
 	s8 temperature;
-	s32 float_point;
+	s32 fraction;
 
 	word_data = tmp100_read(master_client, READ_REGISTER);
 
@@ -41,13 +40,15 @@ static ssize_t tmp100_print(struct file *filp, char __user *buf,
 		return word_data;
 
 	temperature = word_data;
-	float_point = word_data>>12;
-	float_point &= 0xf;
-	float_point *= 100;
-	float_point >>= 4;
+	fraction = word_data>>12;
+	fraction &= 0xf;
+	fraction *= 100;
+	fraction >>= 4;
 
-	pr_alert("The temperature is %d.%d C\n", temperature, float_point);
-	return 0;
+	pr_alert("The temperature is %d.%.2d C\n", temperature, fraction);
+
+	copy_to_user(buf, &temperature, sizeof(temperature));
+	return sizeof(temperature);
 }
 
 const struct file_operations fops = {
@@ -78,28 +79,25 @@ static int tmp100_probe(struct i2c_client *client,
 		return -1;
 	}
 
-	/*Creating cdev structure*/
 	cdev_init(&etx_cdev, &fops);
 
-	/*Adding character device to the system*/
 	if ((cdev_add(&etx_cdev, dev, 1)) < 0) {
 		pr_info("Cannot add the device to the system\n");
 		goto r_class;
 	}
 
-	/*Creating struct class*/
 	dev_class = class_create(THIS_MODULE, "tmp100_class");
 	if (dev_class == NULL) {
 		pr_info("Cannot create the struct class for device\n");
 		goto r_class;
 	}
 
-	/*Creating device*/
 	if ((device_create(dev_class, NULL, dev, NULL, "tmp100_device")) == NULL) {
 		pr_info("Cannot create the Device\n");
 		goto r_device;
 	}
 	pr_info("Kernel Driver Inserted Successfully...\n");
+
 	return 0;
 
 r_device:
