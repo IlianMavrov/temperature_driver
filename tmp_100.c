@@ -11,10 +11,12 @@
 #define BYTES_TO_READ 2
 #define READ_REGISTER 0x00
 
-dev_t dev;
-static struct i2c_client *master_client;
-static struct class *dev_class;
-static struct cdev etx_cdev;
+struct tmp100_data {
+	dev_t dev;
+	struct i2c_client *master_client;
+	struct class *dev_class;
+	struct cdev etx_cdev;
+} tmp100_data;
 
 static s32 tmp100_read(struct i2c_client *client, u8 buf)
 {
@@ -31,17 +33,25 @@ static ssize_t tmp100_print(struct file *filp, char __user *buf,
 				size_t len, loff_t *off)
 {
 	s32 word_data;
-	s8 temperature;
 	s32 fraction;
+	s8 temperature;
 
-	word_data = tmp100_read(master_client, READ_REGISTER);
+	word_data = 0xf0fe; //tmp100_read(tmp100_data.master_client, READ_REGISTER);
 
 	if (word_data < 0)
 		return word_data;
 
+	/*we get 8 LSB for tme whole part of temperature*/
 	temperature = word_data;
 	fraction = word_data>>12;
 	fraction &= 0xf;
+
+	if (temperature < 0) {
+		temperature += 1;
+		fraction = ~fraction + 1;
+		fraction &= 0xf;
+	}
+
 	fraction *= 100;
 	fraction >>= 4;
 
@@ -65,7 +75,7 @@ static int tmp100_probe(struct i2c_client *client,
 
 	struct i2c_adapter *adapter = client->adapter;
 
-	master_client = client;
+	tmp100_data.master_client = client;
 
 	error = i2c_check_functionality(adapter, I2C_FUNC_I2C);
 	if (error < 0)
@@ -74,25 +84,25 @@ static int tmp100_probe(struct i2c_client *client,
 	if (error < 0)
 		return -ENODEV;
 
-	if ((alloc_chrdev_region(&dev, 0, 1, "proc_tmp100_driver")) < 0) {
+	if ((alloc_chrdev_region(&tmp100_data.dev, 0, 1, "proc_tmp100_driver")) < 0) {
 		pr_info("Cannot alocate major number for device 1\n");
 		return -1;
 	}
 
-	cdev_init(&etx_cdev, &fops);
+	cdev_init(&tmp100_data.etx_cdev, &fops);
 
-	if ((cdev_add(&etx_cdev, dev, 1)) < 0) {
+	if ((cdev_add(&tmp100_data.etx_cdev, tmp100_data.dev, 1)) < 0) {
 		pr_info("Cannot add the device to the system\n");
 		goto r_class;
 	}
 
-	dev_class = class_create(THIS_MODULE, "tmp100_class");
-	if (dev_class == NULL) {
+	tmp100_data.dev_class = class_create(THIS_MODULE, "tstatic mp100_class");
+	if (tmp100_data.dev_class == NULL) {
 		pr_info("Cannot create the struct class for device\n");
 		goto r_class;
 	}
 
-	if ((device_create(dev_class, NULL, dev, NULL, "tmp100_device")) == NULL) {
+	if ((device_create(tmp100_data.dev_class, NULL, tmp100_data.dev, NULL, "tmp100_device")) == NULL) {
 		pr_info("Cannot create the Device\n");
 		goto r_device;
 	}
@@ -101,18 +111,18 @@ static int tmp100_probe(struct i2c_client *client,
 	return 0;
 
 r_device:
-	class_destroy(dev_class);
+	class_destroy(tmp100_data.dev_class);
 r_class:
-	unregister_chrdev_region(dev, 1);
+	unregister_chrdev_region(tmp100_data.dev, 1);
 	return -1;
 };
 static int tmp100_remove(struct i2c_client *client)
 {
 
-	device_destroy(dev_class, dev);
-	class_destroy(dev_class);
-	cdev_del(&etx_cdev);
-	unregister_chrdev_region(dev, 1);
+	device_destroy(tmp100_data.dev_class, tmp100_data.dev);
+	class_destroy(tmp100_data.dev_class);
+	cdev_del(&tmp100_data.etx_cdev);
+	unregister_chrdev_region(tmp100_data.dev, 1);
 
 	pr_info("Kernel Driver Removed Successfully...\n");
 	return 0;
