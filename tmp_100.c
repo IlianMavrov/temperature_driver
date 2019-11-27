@@ -7,58 +7,42 @@
 #include <linux/kdev_t.h>
 #include <linux/cdev.h>
 #include <linux/uaccess.h>
+#include <linux/regmap.h>
 
-#define BYTES_TO_READ 2
-#define READ_REGISTER 0x00
+#define BYTES_TO_READ		2
+#define READ_REGISTER		0x00
+#define CONF_REGISTER		0x01
+#define TMP100_LOW_REGISTER	0x02
+#define TMP100_HIGH_REGISTER	0x03
 
 struct tmp100_data {
 	dev_t dev;
 	struct i2c_client *master_client;
 	struct class *dev_class;
 	struct cdev etx_cdev;
-} tmp100_data;
-
-static s32 tmp100_read(struct i2c_client *client, u8 buf)
-{
-	s32 word_data;
-
-	word_data = i2c_smbus_read_word_data(client, buf);
-	if (word_data < 0)
-		return -EIO;
-	else
-		return word_data;
-}
+	struct regmap *regmap;
+};
+struct tmp100_data tmp100_data;
 
 static ssize_t tmp100_print(struct file *filp, char __user *buf,
 				size_t len, loff_t *off)
 {
-	s32 word_data;
-	s32 fraction;
-	s8 temperature;
+	//add here regmap_read
+	unsigned int regval;
+	int err;
+	s16 temperature;
+	char temp[9];
 
-	word_data = 0xf0fe; //tmp100_read(tmp100_data.master_client, READ_REGISTER);
+	err = regmap_read(tmp100_data.regmap, READ_REGISTER, &regval);
+	if (err < 0)
+		return err;
 
-	if (word_data < 0)
-		return word_data;
+	temperature = regval;
+	pr_alert("The temperature is : %d", regval>>8);
+	//	snprintf(temp, sizeof(temp), "%2d.%2d" (regval>>8)(((regval>>4)&0xf)>>4));
 
-	/*we get 8 LSB for tme whole part of temperature*/
-	temperature = word_data;
-	fraction = word_data>>12;
-	fraction &= 0xf;
-
-	if (temperature < 0) {
-		temperature += 1;
-		fraction = ~fraction + 1;
-		fraction &= 0xf;
-	}
-
-	fraction *= 100;
-	fraction >>= 4;
-
-	pr_alert("The temperature is %d.%.2d C\n", temperature, fraction);
-
-	copy_to_user(buf, &temperature, sizeof(temperature));
-	return sizeof(temperature);
+	//copy_to_user
+	return 0;
 }
 
 const struct file_operations fops = {
@@ -66,8 +50,14 @@ const struct file_operations fops = {
 	.read           = tmp100_print,
 };
 
+static const struct regmap_config tmp100_regmap_config = {
+	.reg_bits = 8,
+	.val_bits = 16,
+	.max_register = TMP100_HIGH_REGISTER,
+};
+
 static int tmp100_probe(struct i2c_client *client,
-						const struct i2c_device_id *id)
+				const struct i2c_device_id *id)
 {
 
 	int error;
@@ -96,7 +86,7 @@ static int tmp100_probe(struct i2c_client *client,
 		goto r_class;
 	}
 
-	tmp100_data.dev_class = class_create(THIS_MODULE, "tstatic mp100_class");
+	tmp100_data.dev_class = class_create(THIS_MODULE, "tmp100_class");
 	if (tmp100_data.dev_class == NULL) {
 		pr_info("Cannot create the struct class for device\n");
 		goto r_class;
@@ -106,7 +96,7 @@ static int tmp100_probe(struct i2c_client *client,
 		pr_info("Cannot create the Device\n");
 		goto r_device;
 	}
-	pr_info("Kernel Driver Inserted Successfully...\n");
+	pr_alert("Kernel Driver Inserted Successfully...\n");
 
 	return 0;
 
@@ -124,7 +114,7 @@ static int tmp100_remove(struct i2c_client *client)
 	cdev_del(&tmp100_data.etx_cdev);
 	unregister_chrdev_region(tmp100_data.dev, 1);
 
-	pr_info("Kernel Driver Removed Successfully...\n");
+	pr_alert("Kernel Driver Removed Successfully...\n");
 	return 0;
 };
 
