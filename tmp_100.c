@@ -68,8 +68,10 @@ static int tmp100_probe(struct i2c_client *client,
 	tmp100_data.master_client = client;
 
 	error = i2c_check_functionality(adapter, I2C_FUNC_I2C);
-	if (error < 0)
+	if (error < 0) {
+		pr_info("kur\n");
 		return -ENODEV;
+	}
 	error = i2c_master_recv(client, val, BYTES_TO_READ);
 	if (error < 0)
 		return -ENODEV;
