@@ -12,6 +12,7 @@
 #include <linux/kernel.h>
 
 #define DRIVER_NAME	"tmp100"
+
 #define BUF_SIZE	(10)
 
 #define TMP100_READ_REG	0x00
