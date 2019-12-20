@@ -12,7 +12,6 @@
 #include <linux/kernel.h>
 
 #define DRIVER_NAME	"tmp100"
-
 #define BUF_SIZE	(10)
 
 #define TMP100_READ_REG	0x00
@@ -35,6 +34,7 @@ static ssize_t tmp100_print(struct file *filp, char __user *buf,
 	int err, count;
 	s16 regval_signed;
 	char temp[BUF_SIZE];
+	char sign = ' ';
 
 	err = regmap_read(tmp100_data.regmap, TMP100_READ_REG, &regval);
 	if (err < 0)
@@ -43,12 +43,11 @@ static ssize_t tmp100_print(struct file *filp, char __user *buf,
 	regval_signed = regval;
 	if (regval_signed < 0) {
 		regval_signed = -regval_signed;
-		snprintf(temp, sizeof(temp), "- %d.%04d\n", regval_signed>>8,
-				(((regval_signed>>4)&0xf)*10000)>>4);
-	} else {
-		snprintf(temp, sizeof(temp), "%d.%04d\n", regval_signed>>8,
-				(((regval_signed>>4)&0xf)*10000)>>4);
+		sign = '-';
 	}
+
+	snprintf(temp, sizeof(temp), "%c%d.%04d\n", sign, regval_signed>>8,
+				(((regval_signed>>4)&0xf)*10000)>>4);
 
 	temp[BUF_SIZE - 1] = '\0';
 	count = strlen(temp);
@@ -123,7 +122,7 @@ r_device:
 	class_destroy(tmp100_data.dev_class);
 r_class:
 	unregister_chrdev_region(tmp100_data.dev, 1);
-	return -1;
+	return -1;	/*return propper error code????*/
 };
 static int tmp100_remove(struct i2c_client *client)
 {
@@ -144,7 +143,7 @@ static const struct i2c_device_id tmp100_i2c_id[] = {
 MODULE_DEVICE_TABLE(i2c, tmp100_i2c_id);
 
 static const struct of_device_id tmp100_of_match[] = {
-	{ .compatible = "ti,tmp100"},
+	{ .compatible = "ti, tmp100"},
 	{},
 };
 MODULE_DEVICE_TABLE(of, tmp100_of_match);
